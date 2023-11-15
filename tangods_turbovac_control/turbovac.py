@@ -73,7 +73,7 @@ class TurboVacControlController(Device):
         return self._control_interface.status.voltage
 
     def read_extra_status(self):
-        descriptions = (
+        descriptions = list(
             member.description for member in self._control_interface.status.status_bits
         )
         return descriptions
