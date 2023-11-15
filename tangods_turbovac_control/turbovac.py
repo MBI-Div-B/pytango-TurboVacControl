@@ -47,9 +47,14 @@ class TurboVacControlController(Device):
         unit="V",
         format="%2.2f",
     )
-    extra_status = attribute(
-        label="status",
-        dtype=(str,),
+    pump_state = attribute(label="pump state", dtype=DevState)
+    warnings = attribute(
+        label="warnings",
+        dtype=str,
+    )
+    error = attribute(
+        label="error",
+        dtype=str,
     )
 
     def read_pump_on(self):
@@ -72,21 +77,58 @@ class TurboVacControlController(Device):
     def read_voltage(self):
         return self._control_interface.status.voltage
 
-    def read_extra_status(self):
-        descriptions = list(
-            member.description for member in self._control_interface.status.status_bits
+    def read_pump_state(self):
+        state = DevState.UNKNOWN
+        status_codes = list(
+            map(lambda x: int(x), self._control_interface.status.status_bits)
         )
-        return descriptions
+        # see codes.StatusBits in turboctl.telegram
+        if 0 in status_codes:
+            state = DevState.INIT
+        if 2 in status_codes:
+            state = DevState.ON
+        if 4 in status_codes or 5 in status_codes:
+            state = DevState.MOVING
+        if 11 in status_codes:
+            state = DevState.RUNNING
+        if 7 in status_codes or 13 in status_codes or 14 in status_codes:
+            state = DevState.ALARM
+        if 3 in status_codes:
+            state = DevState.FAULT
+        return state
+
+    def read_warnings(self):
+        warnings_str = ""
+        for status in self._control_interface.status.status_bits:
+            if int(status) in [7, 13, 14]:
+                warnings_str.join(f"{status.description} ")
+        if warnings_str == "":
+            warnings_str = "Clear"
+        return warnings_str
+
+    def read_error(self):
+        error_str = "Clear"
+        for status in self._control_interface.status.status_bits:
+            if int(status) == 3:
+                error_str = status.description
+        return error_str
 
     def init_device(self):
         Device.init_device(self)
         self.set_state(DevState.INIT)
         self.get_device_properties()
+        # since we are not able to set pump_on default value to False before
+        # the ControlInterface will be created and auto_update is running instantly
+        # we need to firstly disable auto_update
         self._control_interface = ControlInterface(
-            self.PUMP_SERIAL_PORT, auto_update=True
+            self.PUMP_SERIAL_PORT, auto_update=False
         )
+        # then set the default value for pump_on to False
         self._control_interface.status.pump_on = False
+        # set the auto_polling period to ours
         self._control_interface.timestep = self.PUMP_POLLING_PERIOD
+        # and then manually start the updating thread
+        self._control_interface._thread.start()
         self.set_state(DevState.ON)
 
     def delete_device(self):
