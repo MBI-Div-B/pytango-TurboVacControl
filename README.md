@@ -9,10 +9,9 @@ With this TangoDS you can control a Leybold Turbovac pump
 TBD
 
 ## Authors
-The 99% percent of the work was done in the [TurboCtl program](https://github.com/fkivela/TurboCtl). This tango device basically uses the given API. All thanks to the great guy [@fkivela](https://gtihub.com/fkivela)
-Contributors names and contact info
+The 99% percent of the work was done in the [TurboCtl program](https://github.com/fkivela/TurboCtl). This tango device basically uses the given API. All thanks to the great guy [@fkivela](https://github.com/fkivela).
 
-[@lrlunin](https://github.com/lrlunin)
+The adapting of it to tango device was done by [@lrlunin](https://github.com/lrlunin).
 
 ## License
 
