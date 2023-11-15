@@ -1,9 +1,7 @@
-from tango import AttrWriteType, DispLevel, DevState
+from tango import DevState, Database
 from tango.server import Device, attribute, command, device_property, GreenMode
 from importlib.resources import files
 from turboctl.ui.control_interface import ControlInterface
-import numpy as np
-import asyncio
 
 
 class TurboVacControlController(Device):
@@ -17,11 +15,8 @@ class TurboVacControlController(Device):
         doc="Polling period in secs",
         default_value="5",
     )
-    pump_on = attribute(
-        label="pump on",
-        dtype=bool,
-        access=AttrWriteType.READ_WRITE,
-        hw_memorized=True,
+    DEVICE_PUMP_ON = device_property(
+        dtype=bool, doc="save of last set value", default_value=False
     )
     frequency = attribute(
         label="frequency",
@@ -47,7 +42,6 @@ class TurboVacControlController(Device):
         unit="V",
         format="%2.2f",
     )
-    pump_state = attribute(label="pump state", dtype=DevState)
     warnings = attribute(
         label="warnings",
         dtype=str,
@@ -56,9 +50,6 @@ class TurboVacControlController(Device):
         label="error",
         dtype=str,
     )
-
-    def read_pump_on(self):
-        return self._control_interface.status.pump_on
 
     def write_pump_on(self, value):
         self._control_interface.status.pump_on = value
@@ -77,7 +68,7 @@ class TurboVacControlController(Device):
     def read_voltage(self):
         return self._control_interface.status.voltage
 
-    def read_pump_state(self):
+    def dev_state(self):
         state = DevState.UNKNOWN
         status_codes = list(
             map(lambda x: int(x), self._control_interface.status.status_bits)
@@ -97,11 +88,16 @@ class TurboVacControlController(Device):
             state = DevState.FAULT
         return state
 
+    def dev_status(self):
+        return ", ".join(
+            map(lambda x: x.description, self._control_interface.status.status_bits)
+        )
+
     def read_warnings(self):
         warnings_str = ""
         for status in self._control_interface.status.status_bits:
             if int(status) in [7, 13, 14]:
-                warnings_str.join(f"{status.description} ")
+                warnings_str += f"{status.description}, "
         if warnings_str == "":
             warnings_str = "Clear"
         return warnings_str
@@ -113,9 +109,24 @@ class TurboVacControlController(Device):
                 error_str = status.description
         return error_str
 
+    @command
+    def turn_off(self):
+        self._control_interface.status.pump_on = False
+        # to instantly send the command
+        self._control_interface.get_status()
+        # save the value for the next start
+        self._db.put_device_property(self.get_name(), {"DEVICE_PUMP_ON": False})
+
+    @command
+    def turn_on(self):
+        self._control_interface.status.pump_on = True
+        # to instantly send the command
+        self._control_interface.get_status()
+        # save the value for the next start
+        self._db.put_device_property(self.get_name(), {"DEVICE_PUMP_ON": True})
+
     def init_device(self):
         Device.init_device(self)
-        self.set_state(DevState.INIT)
         self.get_device_properties()
         # since we are not able to set pump_on default value to False before
         # the ControlInterface will be created and auto_update is running instantly
@@ -124,12 +135,16 @@ class TurboVacControlController(Device):
             self.PUMP_SERIAL_PORT, auto_update=False
         )
         # then set the default value for pump_on to False
-        self._control_interface.status.pump_on = False
+        self._control_interface.status.pump_on = self.DEVICE_PUMP_ON
         # set the auto_polling period to ours
         self._control_interface.timestep = self.PUMP_POLLING_PERIOD
         # and then manually start the updating thread
         self._control_interface._thread.start()
-        self.set_state(DevState.ON)
+        self._db = Database()
 
     def delete_device(self):
+        # save on device close
+        self._db.put_device_property(
+            self.get_name(), {"DEVICE_PUMP_ON": self._control_interface.status.pump_on}
+        )
         Device.delete_device(self)
