@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tangods_turbovac_control"
+description = "Leybold TurboVac TangoDS"
+keywords = ["tango device", "tango", "pytango", "leybold", "turbovac"]
+readme = "README.md"
+authors = [
+    {name = "Leonid Lunin", email = "lunin.leonid@gmail.com"},
+]
+requires-python = ">=3.10"
+dependencies = ['pytango', 'turboCtl @ git+https://github.com/MBI-Div-B/TurboCtl.git']
+license = {text = "GPL-3.0-or-later"}
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/MBI-Div-B/pytango-evr116"
+
+[project.scripts]
+TurboVacControl = "tangods_turbovac_control:main"
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
+
+[tool.setuptools.packages.find]
+
+[tool.setuptools.package-data]
+tangods_turbovac_control = ["VERSION"]
