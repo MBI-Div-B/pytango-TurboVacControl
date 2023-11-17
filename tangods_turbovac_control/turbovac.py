@@ -2,6 +2,7 @@ from tango import DevState, Database
 from tango.server import Device, attribute, command, device_property, GreenMode
 from importlib.resources import files
 from turboctl.ui.control_interface import ControlInterface
+import time
 
 
 class TurboVacControlController(Device):
@@ -9,11 +10,6 @@ class TurboVacControlController(Device):
         dtype=str,
         doc="Serial port for either USB COM-PORT (default: /dev/ttyACM0) or RS485 interface (for vakupi: /dev/ttyAMA0)",
         default_value="/dev/ttyAMA0",
-    )
-    PUMP_POLLING_PERIOD = device_property(
-        dtype=int,
-        doc="Polling period in secs",
-        default_value="5",
     )
     DEVICE_PUMP_ON = device_property(
         dtype=bool, doc="save of last set value", default_value=False
@@ -131,6 +127,12 @@ class TurboVacControlController(Device):
         # clear error forces pump to be switched off
         self._db.put_device_property(self.get_name(), {"DEVICE_PUMP_ON": False})
 
+    def always_executed_hook(self):
+        now = time.time()
+        if now - self._last_status_query > 20:
+            self._last_status_query = now
+            self._control_interface.get_status()
+
     def init_device(self):
         Device.init_device(self)
         self.get_device_properties()
@@ -142,11 +144,12 @@ class TurboVacControlController(Device):
         )
         # then set the default value for pump_on to False
         self._control_interface.status.pump_on = self.DEVICE_PUMP_ON
-        # set the auto_polling period to ours
-        self._control_interface.timestep = self.PUMP_POLLING_PERIOD
-        # and then manually start the updating thread
-        self._control_interface._thread.start()
+        # ask once to avoid empty variables
+        self._control_interface.get_status()
+        self._last_status_query = time.time()
         self._db = Database()
+        if not self.is_attribute_polled("State"):
+            self.poll_attribute("State", 9500)
 
     def delete_device(self):
         # save on device close
