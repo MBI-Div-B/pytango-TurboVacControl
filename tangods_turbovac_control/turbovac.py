@@ -129,7 +129,7 @@ class TurboVacControlController(Device):
 
     def always_executed_hook(self):
         now = time.time()
-        if now - self._last_status_query > 20:
+        if now - self._last_status_query > 0.2:
             self._last_status_query = now
             self._control_interface.get_status()
 
