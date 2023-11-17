@@ -125,6 +125,12 @@ class TurboVacControlController(Device):
         # save the value for the next start
         self._db.put_device_property(self.get_name(), {"DEVICE_PUMP_ON": True})
 
+    @command
+    def reset_error(self):
+        self._control_interface.reset_error()
+        # clear error forces pump to be switched off
+        self._db.put_device_property(self.get_name(), {"DEVICE_PUMP_ON": False})
+
     def init_device(self):
         Device.init_device(self)
         self.get_device_properties()
