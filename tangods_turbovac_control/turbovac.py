@@ -1,4 +1,4 @@
-from tango import DevState, Database
+from tango import DevState, Database, DeviceProxy
 from tango.server import Device, attribute, command, device_property, GreenMode
 from importlib.resources import files
 from turboctl.ui.control_interface import ControlInterface
@@ -10,6 +10,9 @@ class TurboVacControlController(Device):
         dtype=str,
         doc="Serial port for either USB COM-PORT (default: /dev/ttyACM0) or RS485 interface (for vakupi: /dev/ttyAMA0)",
         default_value="/dev/ttyAMA0",
+    )
+    Pressure_device_FQDN = device_property(
+        dtype=str, doc="Tango device which indicates pressure in the evacuated volume"
     )
     frequency = attribute(
         label="frequency",
@@ -103,9 +106,8 @@ class TurboVacControlController(Device):
         # since we are not able to set pump_on default value to False before
         # the ControlInterface will be created and auto_update is running instantly
         # we need to firstly disable auto_update
-        self._control_interface = ControlInterface(
-            self.Port, auto_update=False
-        )
+        self._control_interface = ControlInterface(self.Port, auto_update=False)
+        self.init_dynamic_attributes()
         # then set the default value for pump_on to False
         # ask once to avoid empty variables
         self._control_interface.get_status()
@@ -113,6 +115,30 @@ class TurboVacControlController(Device):
         self._db = Database()
         if not self.is_attribute_polled("State"):
             self.poll_attribute("State", 9500)
+
+    def init_dynamic_attributes(self):
+        if self.Pressure_device_FQDN is not None:
+            try:
+                self.pressure_proxy = DeviceProxy(self.Pressure_device_FQDN)
+                self.pressure_proxy.ping()
+            except:
+                self.info_stream(
+                    f"Could not connect to pressure device {self.Pressure_device_FQDN}"
+                )
+            else:
+                self.add_attribute(
+                    attribute(
+                        name="pressure",
+                        label="pressure",
+                        dtype=float,
+                        format="%7.3e",
+                        unit="mbar",
+                        fget=self.get_pressure,
+                    )
+                )
+
+    def get_pressure(self, attr_name):
+        return self.pressure_proxy.pressure
 
     def delete_device(self):
         Device.delete_device(self)
