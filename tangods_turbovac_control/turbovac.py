@@ -2,6 +2,7 @@ from tango import DevState, Database, DeviceProxy
 from tango.server import Device, attribute, command, device_property, GreenMode
 from importlib.resources import files
 from turboctl.ui.control_interface import ControlInterface
+import threading
 import time
 
 
@@ -88,6 +89,23 @@ class TurboVacControlController(Device):
         # to instantly send the command
         self._control_interface.apply_state()
 
+    @command(dtype_in=float, doc_in="minimal pressure in mbar")
+    def turn_on_at_pressure(self, setpoint):
+        if self.get_pressure("pressure") is not None:
+            threading.Thread(target=self._pressure_check, args=(setpoint,)).start()
+
+    @command
+    def abort_turn_on_at_pressure(self):
+        self._abort_turn_on = True
+
+    def _pressure_check(self, setpoint):
+        self._abort_turn_on = False
+        while self.get_pressure() > setpoint:
+            if self._abort_turn_on:
+                return
+            time.sleep(10)
+        self.turn_on()
+
     @command
     def reset_error(self):
         # clear error forces pump to be switched off
@@ -107,6 +125,7 @@ class TurboVacControlController(Device):
         # the ControlInterface will be created and auto_update is running instantly
         # we need to firstly disable auto_update
         self._control_interface = ControlInterface(self.Port, auto_update=False)
+        self._abort_turn_on = False
         self.init_dynamic_attributes()
         # then set the default value for pump_on to False
         # ask once to avoid empty variables
